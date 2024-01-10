@@ -7,13 +7,14 @@
 #include "TLorentzVector.h"
 #include <iostream> 
 #include <fstream>
+#include <stdlib.h>
 using namespace std;
 
 struct PairedMuonIdx {
-	int p11;
-	int p12;
-	int p21;
-	int p22;
+	int p11; 
+	int p12; 
+	int p21; 
+	int p22; 
 };
 
 void myntuple::Loop()
@@ -92,10 +93,13 @@ void myntuple::Loop()
 
 			vector<TLorentzVector> rawMup4vect, rawMuinFourMuFMp4vect;
 			TLorentzVector Rawmu, RawmuinFourMuFM;
+			// Pushback the four muon p4
 			float raw_muPx = (*muPx)[(*MyFourMuonMu1Idx)[myFourMuIdx]];
 			float raw_muPy = (*muPy)[(*MyFourMuonMu1Idx)[myFourMuIdx]];
 			float raw_muPz = (*muPz)[(*MyFourMuonMu1Idx)[myFourMuIdx]];
+			// set four momentum of a single muon
 			Rawmu.SetXYZM(raw_muPx, raw_muPy,raw_muPz, MUON_MASS);   
+			// boost in the center of momentum frame of the four muon?
 			RawmuinFourMuFM = Rawmu; RawmuinFourMuFM.Boost(-myFourMuonP4.BoostVector());
 			rawMup4vect.push_back(Rawmu); rawMuinFourMuFMp4vect.push_back(RawmuinFourMuFM);
 			raw_muPx = (*muPx)[(*MyFourMuonMu2Idx)[myFourMuIdx]]; raw_muPy = (*muPy)[(*MyFourMuonMu2Idx)[myFourMuIdx]];raw_muPz = (*muPz)[(*MyFourMuonMu2Idx)[myFourMuIdx]];
@@ -128,7 +132,7 @@ void myntuple::Loop()
 			Fitmu.SetXYZM(fit_muPx, fit_muPy,fit_muPz, fit_muM);  fitMup4vect.push_back(Fitmu);
 			fit_muPx = (*MyFourMuonMu4Px)[myFourMuIdx]; fit_muPy = (*MyFourMuonMu4Py)[myFourMuIdx]; fit_muPz = (*MyFourMuonMu4Pz)[myFourMuIdx];
 			Fitmu.SetXYZM(fit_muPx, fit_muPy,fit_muPz, fit_muM);  fitMup4vect.push_back(Fitmu);
-
+			// how is fit_muPx different from raw_muPx?
 			PairedMuonIdx myCombIdx[3];   
 			myCombIdx[0].p11 = 0; myCombIdx[0].p12 = 1; myCombIdx[0].p21 = 2; myCombIdx[0].p22 = 3; 
 			myCombIdx[1].p11 = 0; myCombIdx[1].p12 = 2; myCombIdx[1].p21 = 1; myCombIdx[1].p22 = 3; 
@@ -147,6 +151,21 @@ void myntuple::Loop()
 					// requiring all muons to come from the same vertex
 					&& (*MyFourMuonVtxCL)[myFourMuIdx] >= 0.005     
 					// Here add the selections! 
+					// Trigger selections: HLT_Dimuon0_Jpsi3p5_Muon2, HLT_Dimuon0_Jpsi_Muon
+					&& (TrigThreeMuonJpsi3p5mu2 || TrigThreeMuonJpsi)
+					// The transverse momentum of each muon is greater than or equal to 2.0
+					&& fitMup4vect[0].Pt() >= 2.0
+					&& fitMup4vect[1].Pt() >= 2.0
+					&& fitMup4vect[2].Pt() >= 2.0
+					&& fitMup4vect[3].Pt() >= 2.0
+					// The absolute pseudorapidity of each muon is less than or equal to 2.4
+					&& abs(fitMup4vect[0].Eta()) <= 2.4
+					&& abs(fitMup4vect[1].Eta()) <= 2.4
+					&& abs(fitMup4vect[2].Eta()) <= 2.4
+					&& abs(fitMup4vect[3].Eta()) <= 2.4
+					// The charge of each muon pair is also 0 (Tip: this means that the sum of the charge all muons is also zero)
+					&& fitMuCharge[0] + fitMuCharge[1] == 0
+					&& fitMuCharge[2] + fitMuCharge[3] == 0
 				) {
 				for (int mypidx = 0; mypidx < 3; mypidx++)  {
 					int muIdxp11, muIdxp12, muIdxp21, muIdxp22;
@@ -155,21 +174,27 @@ void myntuple::Loop()
 
 					if(1
                                                 // Here, require the muon pairs to have muons with opposite charges
+												&& fitMuCharge[muIdxp11] + fitMuCharge[muIdxp12] == 0
+												&& fitMuCharge[muIdxp21] + fitMuCharge[muIdxp22] == 0
 					  )
 					{
 						// Modify the DiMuonMass expression appropriatly. 
 						// Use the fitMup4vect and the muIdxpXY indexes defined above.
-						DiMuonMass1 = 0; 
-						DiMuonMass2 = 0;
+						DiMuonMass1 = (fitMup4vect[muIdxp11] + fitMup4vect[muIdxp12]).M();
+						DiMuonMass2 = (fitMup4vect[muIdxp21] + fitMup4vect[muIdxp22]).M();
+
 						myDiMuon1mass->Fill(DiMuonMass1);
 						myDiMuon2mass->Fill(DiMuonMass2);
 
 						if (1
 								// Here require that each DiMuonMass is in the appropriate mass range [2.95,3.25] GeV
+								&& DiMuonMass1 >= 2.95 && DiMuonMass1 <= 3.25
+								&& DiMuonMass2 >= 2.95 && DiMuonMass2 <= 3.25
 														   )
 						{
 							// calculate the 4 muon mass:  M(µ1µ2µ3µ4)-M(µ1µ2)-M(µ3µ4)+2*M(J/psi)  
-							m4Muon = 0;
+							m4Muon = (fitMup4vect[0] + fitMup4vect[1] + fitMup4vect[2] + fitMup4vect[3]).M() 
+							- DiMuonMass1 - DiMuonMass2 + 2*JPSI_MASS;
 
 							myFourMuonmass->Fill(m4Muon);
 
