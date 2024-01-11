@@ -375,9 +375,9 @@ void null_BW3_wo0(){
 
 // instead of plotting Dps, Sps, and BW0 separately, we plot them together as "Background"
   model.plotOn(frame, Components(RooArgSet(dpsPdf, spsPdf, Th1Reso)), Name("Background"), LineColor(kOrange), LineStyle(2));
-  model.plotOn(frame, Components(Th2Reso), Name("Th2"), LineColor(kPink), LineStyle(1));
+  model.plotOn(frame, Components(Th2Reso), Name("Th2"), LineColor(kRed), LineStyle(1));
   model.plotOn(frame, Components(Th3Reso), Name("Th3"), LineColor(kRed), LineStyle(2));
-  model.plotOn(frame, Components(Th4Reso), Name("Th4"), LineColor(kGreen+1), LineStyle(3));
+  model.plotOn(frame, Components(Th4Reso), Name("Th4"), LineColor(kRed), LineStyle(3));
 
   frame->GetXaxis()->SetTitle(XTitle.Data());
   frame->GetXaxis()->SetLabelColor(0, 0);
