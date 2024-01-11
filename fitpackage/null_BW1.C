@@ -49,11 +49,22 @@
 #include <vector>
 #include <iomanip>
 
+#include "BlattWeisskopfQ2.h"
+#include "ComplexRelBWFcn.h"
+#include "MyRelBWSquare.h"
+#include "MyRelBWSquareFcn.h"
+
 #include "SpsDpsFcn.h"
 #include "MyNnuSpsSquare.h"
 #include "MyNnuSpsSquareFcn.h"
 #include "MyMiptSpsSquare.h"
 #include "MyMiptSpsSquareFcn.h"
+
+#include "EfficiencyFcn.h"
+#include "MyEffFcn.h"
+
+#include "SigmaFcn.h"
+#include "MiptDoubleGaussian2.h"
 
 #include "tdrstyle.C"
 #include "CMS_lumi.C"
@@ -72,13 +83,18 @@ double effectiveBins(double mth, double mLow, double mUp, double mBins) {
   return effBins;
 }
 
-void null(){
+void null_BW1(){
   setTDRStyle();
   writeExtraText = true;
   lumi_13TeV = "135 fb^{-1}";
   lumi_8TeV = "20.6 fb^{-1}";
   lumi_7TeV = "4.9 fb^{-1}";
   int iPos = 33;
+  gSystem->Load("BlattWeisskopfQ2_cxx.so");
+  gSystem->Load("ComplexRelBWFcn_cxx.so");
+  gSystem->Load("MyRelBWSquare_cxx.so");
+  gSystem->Load("MyRelBWSquareFcn_cxx.so");
+
   gSystem->Load("SpsDpsFcn_cxx.so");
   gSystem->Load("MyNnuSpsSquare_cxx.so");
   gSystem->Load("MyNnuSpsSquareFcn_cxx.so");
@@ -114,13 +130,22 @@ void null(){
   RooRealVar mx("mx", "mx", mxMin, mxMax);
   RooDataSet data = *RooDataSet::read("../fullrun2data/mJJDataFull6000_15000.txt", RooArgList(mx), "Q");
 
-  // Below the two backgrounds due to single and douple parton scattering are defined (SPS and DPS)
+  // Here we introduce the normalization factors
   double numDpsInit = 3.51582e+03, numDpsMin = 0, numDpsMax = 100000;
-  RooRealVar numDps("numDps", "numDps", numDpsInit, numDpsMin, numDpsMax); 
+  RooRealVar numDps("numDps", "numDps", numDpsInit, numDpsMin, numDpsMax);
   numDps.setConstant(kFALSE);
   double numSpsInit = 8.19119e+03, numSpsMin = 0, numSpsMax = 100000;
   RooRealVar numSps("numSps", "numSps", numSpsInit, numSpsMin, numSpsMax);
   numSps.setConstant(kFALSE);
+  // This will be the normalization of our first peak
+  double numTh1Init = 1.27056e+03, numTh1Min = 0, numTh1Max = 10000;
+  RooRealVar numTh1("numTh1", "numTh1", numTh1Init, numTh1Min, numTh1Max);
+  numTh1.setConstant(kFALSE);
+  // This will be the normalization of our second peak
+  double numTh2Init = 1.27056e+03, numTh2Min = 0, numTh2Max = 10000;
+  RooRealVar numTh2("numTh2", "numTh2", numTh2Init, numTh2Min, numTh2Max);
+  numTh2.setConstant(kFALSE);
+
 
   RooRealVar R_ZERO("R_ZERO", "R_ZERO", 0);
   RooRealVar R_ONE("R_ONE", "R_ONE", 1);
@@ -141,14 +166,88 @@ void null(){
       dpsA, dpsP0, dpsP1, dpsP2, R_ZERO, R_ZERO, R_ONE, R_ZERO);
 
   mx.setBins(FFT_BINS, "cache");
+  
+  // Parameters for Breit-Wigner (BW) - see formula in Twiki
+  // and note that some of the parameters are floating while others are fixed
+  double massTh1Init = 6.5000e+00, massTh1Min = 6.20, massTh1Max = 6.50;
+  RooRealVar massTh1("massTh1", "massTh1", massTh1Init, massTh1Min, massTh1Max);
+  massTh1.setConstant(kTRUE); //m_0
+  double widthTh1Init = 9.6300e-01, widthTh1Min = 0.00, widthTh1Max = 1.50;
+  RooRealVar widthTh1("widthTh1", "widthTh1", widthTh1Init, widthTh1Min, widthTh1Max);
+  widthTh1.setConstant(kTRUE); //Gamma_0
+  double LTh1Init = 0; // We assume S-wave
+  RooRealVar LTh1("LTh1", "LTh1", LTh1Init);
+  LTh1.setConstant(kTRUE);
+  double dTh1Init = 3.00, dTh1Min = 1.00, dTh1Max = 5.00;
+  RooRealVar dTh1("dTh1", "dTh1", dTh1Init, dTh1Min, dTh1Max);
+  dTh1.setConstant(kTRUE); 
+  // now add another resonance
+  double massTh2Init = 6.9270e+00, massTh2Min = 6.8, massTh2Max = 7.0;
+  RooRealVar massTh2("massTh2", "massTh2", massTh2Init, massTh2Min, massTh2Max);
+  massTh2.setConstant(kTRUE); //m_0
+  double widthTh2Init = 9.3897e-02, widthTh2Min = 0.00, widthTh2Max = 1.50;
+  RooRealVar widthTh2("widthTh2", "widthTh2", widthTh2Init, widthTh2Min, widthTh2Max);
+  widthTh2.setConstant(kTRUE); //Gamma_0
+  double LTh2Init = 0; // We assume S-wave
+  RooRealVar LTh2("LTh2", "LTh2", LTh2Init);
+  LTh2.setConstant(kTRUE);
+  double dTh2Init = 3.00, dTh2Min = 1.00, dTh2Max = 5.00;
+  RooRealVar dTh2("dTh2", "dTh2", dTh2Init, dTh2Min, dTh2Max);
+  dTh2.setConstant(kTRUE);
+  // the parameters below are related to interference terms. 
+  // We set them to a constant value as we are not considering interference
+  double coefTh1Init = 1, coefTh1Min = 0, coefTh1Max = 1000;
+  RooRealVar coefTh1("coefTh1", "coefTh1", coefTh1Init, coefTh1Min, coefTh1Max);
+  coefTh1.setConstant(kTRUE);
+  double phiTh1Init = 0, phiTh1Min = -PI, phiTh1Max = PI;
+  RooRealVar phiTh1("phiTh1", "phiTh1", phiTh1Init, phiTh1Min, phiTh1Max);
+  phiTh1.setConstant(kTRUE);
+  // now add another resonance
+  double coefTh2Init = 1, coefTh2Min = 0, coefTh2Max = 1000;
+  RooRealVar coefTh2("coefTh2", "coefTh2", coefTh2Init, coefTh2Min, coefTh2Max);
+  coefTh2.setConstant(kTRUE);
+  double phiTh2Init = 0, phiTh2Min = -PI, phiTh2Max = PI;
+  RooRealVar phiTh2("phiTh2", "phiTh2", phiTh2Init, phiTh2Min, phiTh2Max);
+  phiTh2.setConstant(kTRUE);
 
-  // Here we build our model composed of the two backgrounds
-  RooArgList pdfList(dpsPdf, spsPdf);
-  RooArgList numList(numDps, numSps);
+  // To take into account detectors effect that affect the resolution of our peak
+  // we introduce a smearing function with the below parameters
+  RooRealVar R_SHIFT("R_SHIFT", "R_SHIFT", shift);
+  RooRealVar frac_g2("frac_g2", "frac_g2", 0.52357);
+  RooRealVar w_g1("w_g1", "w_g1", 0.024467);
+  RooRealVar w_g2("w_g2", "w_g2", 0.010042);
+  RooRealVar beta("beta", "beta", 0.50989);
+
+  // Here we construct our function with the parameters defined above
+  MyRelBWSquare Th1("Th1", "Th1", mx,
+      massTh1, widthTh1, LTh1, dTh1, coefTh1, phiTh1);
+  // We also need to take into account detector smearing which affect the resolution of the peak
+  MiptDoubleGaussian2 resoTh1("resoTh1", "resoTh1", mx, R_ZERO, frac_g2,
+      massTh1, R_MTH, w_g1, w_g2, beta);
+  // we do a numerical convolution as we do not have an analytical function
+  // This is the final formula for the peak    
+  RooFFTConvPdf Th1Reso("Th1Reso", "Th1Reso",
+      mx, Th1, resoTh1);
+
+  // now add another resonance
+  MyRelBWSquare Th2("Th2", "Th2", mx,
+      massTh2, widthTh2, LTh2, dTh2, coefTh2, phiTh2);
+  // We also need to take into account detector smearing which affect the resolution of the peak
+  MiptDoubleGaussian2 resoTh2("resoTh2", "resoTh2", mx, R_ZERO, frac_g2,
+      massTh2, R_MTH, w_g1, w_g2, beta);
+  // we do a numerical convolution as we do not have an analytical function
+  // This is the final formula for the peak
+  RooFFTConvPdf Th2Reso("Th2Reso", "Th2Reso",
+      mx, Th2, resoTh2);
+
+  // dps, sps, and Th1Reso are backgrounds and Th2Reso is our signal
+  RooArgList pdfList(dpsPdf, spsPdf, Th1Reso, Th2Reso);
+  // we want to normalize them 
+  RooArgList numList(numDps, numSps, numTh1, numTh2);
 
   RooAddPdf model("model", "model", pdfList, numList);
 
-  // Here the fit to the data happens
+  // here is where the actual fitting happens
   RooFitResult *fitRes = model.fitTo(data, Save(kTRUE), 
       Minos(MINOS), Strategy(STRATEGY), NumCPU(NCPU));
   double edm = fitRes->edm();
@@ -178,7 +277,7 @@ void null(){
   *3= full accurate covariance matrix
   */
 
-  // Here we look at the plots
+  // now we want to plot the fit results
   RooPlot *frame = mx.frame(Range(mxMin, mxMax), Bins(mxBins));
   data.plotOn(frame, Name("data"));
   model.plotOn(frame, Name("model"), LineColor(4));
@@ -187,6 +286,8 @@ void null(){
   double prob615 = TMath::Prob(frame->chiSquare() * mxBins , (effBins615 - NPARS));
   model.plotOn(frame, Components(dpsPdf), Name("Dps"), LineColor(kGreen), LineStyle(1));
   model.plotOn(frame, Components(spsPdf), Name("Sps"), LineColor(kViolet), LineStyle(1));
+  model.plotOn(frame, Components(Th1Reso), Name("Th1"), LineColor(kMagenta), LineStyle(kDashDotted));
+  model.plotOn(frame, Components(Th2Reso), Name("Th2"), LineColor(kBlue), LineStyle(kDashDotted));
 
   frame->GetXaxis()->SetTitle(XTitle.Data());
   frame->GetXaxis()->SetLabelColor(0, 0);
@@ -196,8 +297,10 @@ void null(){
   TLegend leg(0.6, 0.45, 0.9, 0.75);
   leg.AddEntry(frame->findObject("data"), "Data", "pe");
   leg.AddEntry(frame->findObject("model"), "Fit", "l");
+  leg.AddEntry(frame->findObject("Th1"), "BW0", "l");
   leg.AddEntry(frame->findObject("Sps"), "SPS", "l");
   leg.AddEntry(frame->findObject("Dps"), "DPS", "l");
+  leg.AddEntry(frame->findObject("Th2"), "BW1", "l");
 
   RooPlot *pullFrame = mx.frame(Range(mxMin, mxMax), Bins(mxBins));
   RooHist *pull = frame->pullHist("data", "model");
@@ -231,7 +334,7 @@ void null(){
   pad12.cd();
   pullFrame->Draw();
   c1.Update();
-  c1.SaveAs("figure/fit_null.pdf");
+  c1.SaveAs("figure/fit_null_BW1_cheat_BW0fixed.png");
       
   fitRes->Print();
   fitRes->Delete();
